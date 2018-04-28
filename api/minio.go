@@ -26,7 +26,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type store struct {
+type Store struct {
 	client     *s3.S3
 	uploader   *s3manager.Uploader
 	downloader *s3manager.Downloader
@@ -34,7 +34,7 @@ type store struct {
 	config     *MinioConfig
 }
 
-func (m *MinioConfig) createStore() *store {
+func (m *MinioConfig) createStore() *Store {
 	client := s3.New(session.Must(session.NewSession(&aws.Config{
 		Credentials:      credentials.NewStaticCredentials(m.AccessKeyID, m.SecretAccessKey, ""),
 		Endpoint:         aws.String(m.Endpoint),
@@ -42,7 +42,7 @@ func (m *MinioConfig) createStore() *store {
 		DisableSSL:       aws.Bool(!m.UseSSL),
 		S3ForcePathStyle: aws.Bool(true),
 	})))
-	return &store{
+	return &Store{
 		client:     client,
 		config:     m,
 		uploader:   s3manager.NewUploaderWithClient(client),
@@ -100,7 +100,7 @@ func (m *MinioConfig) ToMap() (map[string]interface{}, error) {
 	return structs.ToMap(m)
 }
 
-func New() (*store, error) {
+func NewFromEnv() (*Store, error) {
 	m := &MinioConfig{}
 
 	mURL := common.WithDefault("S3_URL",
@@ -137,7 +137,7 @@ func New() (*store, error) {
 	return store, nil
 }
 
-func (s *store) asyncDispatcher(ctx context.Context, wg sync.WaitGroup, log *logrus.Entry, input *s3.ListObjectsInput,
+func (s *Store) asyncDispatcher(ctx context.Context, wg sync.WaitGroup, log *logrus.Entry, input *s3.ListObjectsInput,
 	req *http.Request, httpClient *http.Client) error {
 
 	result, err := s.client.ListObjectsWithContext(ctx, input)
@@ -213,7 +213,7 @@ func (s *store) asyncDispatcher(ctx context.Context, wg sync.WaitGroup, log *log
 	return nil
 }
 
-func (s *store) DispatchObjects(ctx context.Context, wg sync.WaitGroup) error {
+func (s *Store) DispatchObjects(ctx context.Context, wg sync.WaitGroup) error {
 	log := logrus.WithFields(logrus.Fields{"bucketName": s.config.Bucket})
 
 	input := &s3.ListObjectsInput{
