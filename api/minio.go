@@ -27,11 +27,11 @@ import (
 )
 
 type Store struct {
-	client     *s3.S3
-	uploader   *s3manager.Uploader
-	downloader *s3manager.Downloader
+	Client     *s3.S3
+	Uploader   *s3manager.Uploader
+	Downloader *s3manager.Downloader
 	bucket     string
-	config     *MinioConfig
+	Config     *MinioConfig
 }
 
 func (m *MinioConfig) createStore() *Store {
@@ -43,10 +43,10 @@ func (m *MinioConfig) createStore() *Store {
 		S3ForcePathStyle: aws.Bool(true),
 	})))
 	return &Store{
-		client:     client,
-		config:     m,
-		uploader:   s3manager.NewUploaderWithClient(client),
-		downloader: s3manager.NewDownloaderWithClient(client),
+		Client:     client,
+		Config:     m,
+		Uploader:   s3manager.NewUploaderWithClient(client),
+		Downloader: s3manager.NewDownloaderWithClient(client),
 	}
 }
 
@@ -120,7 +120,7 @@ func NewFromEnv() (*Store, error) {
 
 	store := m.createStore()
 
-	_, err = store.client.CreateBucket(&s3.CreateBucketInput{Bucket: aws.String(m.Bucket)})
+	_, err = store.Client.CreateBucket(&s3.CreateBucketInput{Bucket: aws.String(m.Bucket)})
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
@@ -140,7 +140,7 @@ func NewFromEnv() (*Store, error) {
 func (s *Store) asyncDispatcher(ctx context.Context, wg sync.WaitGroup, log *logrus.Entry, input *s3.ListObjectsInput,
 	req *http.Request, httpClient *http.Client) error {
 
-	result, err := s.client.ListObjectsWithContext(ctx, input)
+	result, err := s.Client.ListObjectsWithContext(ctx, input)
 	if err != nil {
 		return err
 	}
@@ -160,9 +160,9 @@ func (s *Store) asyncDispatcher(ctx context.Context, wg sync.WaitGroup, log *log
 				defer wg.Done()
 
 				err := func() error {
-					log.Info("Sending the object: ", s.config.Bucket+"/"+*object.Key)
-					getR, _ := s.client.GetObjectRequest(&s3.GetObjectInput{
-						Bucket: aws.String(s.config.Bucket),
+					log.Info("Sending the object: ", s.Config.Bucket+"/"+*object.Key)
+					getR, _ := s.Client.GetObjectRequest(&s3.GetObjectInput{
+						Bucket: aws.String(s.Config.Bucket),
 						Key:    object.Key,
 					})
 					getRstr, err := getR.Presign(1 * time.Hour)
@@ -170,8 +170,8 @@ func (s *Store) asyncDispatcher(ctx context.Context, wg sync.WaitGroup, log *log
 						return err
 					}
 
-					putR, _ := s.client.PutObjectRequest(&s3.PutObjectInput{
-						Bucket: aws.String(s.config.Bucket),
+					putR, _ := s.Client.PutObjectRequest(&s3.PutObjectInput{
+						Bucket: aws.String(s.Config.Bucket),
 						Key:    object.Key,
 					})
 					putRstr, err := putR.Presign(1 * time.Hour)
@@ -180,7 +180,7 @@ func (s *Store) asyncDispatcher(ctx context.Context, wg sync.WaitGroup, log *log
 					}
 
 					payload := &common.RequestPayload{
-						Bucket: s.config.Bucket,
+						Bucket: s.Config.Bucket,
 						Object: *object.Key,
 						PreSignedURLs: common.PreSignedURLs{
 							GetURL: getRstr,
@@ -214,10 +214,10 @@ func (s *Store) asyncDispatcher(ctx context.Context, wg sync.WaitGroup, log *log
 }
 
 func (s *Store) DispatchObjects(ctx context.Context, wg sync.WaitGroup) error {
-	log := logrus.WithFields(logrus.Fields{"bucketName": s.config.Bucket})
+	log := logrus.WithFields(logrus.Fields{"bucketName": s.Config.Bucket})
 
 	input := &s3.ListObjectsInput{
-		Bucket:  aws.String(s.config.Bucket),
+		Bucket:  aws.String(s.Config.Bucket),
 		MaxKeys: aws.Int64(10),
 		Marker:  aws.String(""),
 	}
