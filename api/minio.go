@@ -57,6 +57,7 @@ type MinioConfig struct {
 	AccessKeyID     string `json:"access_key_id"`
 	SecretAccessKey string `json:"secret_access_key"`
 	UseSSL          bool   `json:"use_ssl"`
+	RawEndpoint     string `json:"raw_endpoint"`
 }
 
 func (m *MinioConfig) FromURL(s string) error {
@@ -92,6 +93,7 @@ func (m *MinioConfig) FromURL(s string) error {
 	m.AccessKeyID = accessKeyID
 	m.SecretAccessKey = secretAccessKey
 	m.UseSSL = useSSL
+	m.RawEndpoint = endpoint
 
 	return nil
 }
@@ -100,14 +102,9 @@ func (m *MinioConfig) ToMap() (map[string]interface{}, error) {
 	return structs.ToMap(m)
 }
 
-func NewFromEnv() (*Store, error) {
+func NewFromEndpoint(endpoint string) (*Store, error) {
 	m := &MinioConfig{}
-
-	mURL := common.WithDefault("S3_URL",
-		"s3://admin:password@s3:9000/us-east-1/default-bucket")
-	logrus.Println("S3 URL: ", mURL)
-
-	err := m.FromURL(mURL)
+	err := m.FromURL(endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -135,6 +132,12 @@ func NewFromEnv() (*Store, error) {
 	}
 
 	return store, nil
+}
+
+func NewFromEnv() (*Store, error) {
+	mURL := common.WithDefault("S3_URL",
+		"s3://admin:password@s3:9000/us-east-1/default-bucket")
+	return NewFromEndpoint(mURL)
 }
 
 func (s *Store) asyncDispatcher(ctx context.Context, wg sync.WaitGroup, log *logrus.Entry, input *s3.ListObjectsInput,
@@ -180,8 +183,9 @@ func (s *Store) asyncDispatcher(ctx context.Context, wg sync.WaitGroup, log *log
 					}
 
 					payload := &common.RequestPayload{
-						Bucket: s.Config.Bucket,
-						Object: *object.Key,
+						S3Endpoint: s.Config.RawEndpoint,
+						Bucket:     s.Config.Bucket,
+						Object:     *object.Key,
 						PreSignedURLs: common.PreSignedURLs{
 							GetURL: getRstr,
 							PutURL: putRstr,

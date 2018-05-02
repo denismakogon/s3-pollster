@@ -18,6 +18,7 @@ type PreSignedURLs struct {
 }
 
 type RequestPayload struct {
+	S3Endpoint    string        `json:"s3_endpoint"`
 	Bucket        string        `json:"bucket"`
 	Object        string        `json:"object"`
 	PreSignedURLs PreSignedURLs `json:"presigned_urls"`
