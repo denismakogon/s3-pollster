@@ -93,7 +93,7 @@ func (m *MinioConfig) FromURL(s string) error {
 	m.AccessKeyID = accessKeyID
 	m.SecretAccessKey = secretAccessKey
 	m.UseSSL = useSSL
-	m.RawEndpoint = endpoint
+	m.RawEndpoint = s
 
 	return nil
 }
