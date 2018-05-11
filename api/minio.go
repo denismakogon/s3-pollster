@@ -198,7 +198,7 @@ func (s *Store) asyncDispatcher(ctx context.Context, wg sync.WaitGroup, log *log
 					}
 
 					req.Body = ioutil.NopCloser(&b)
-					err = common.DoRequest(req, httpClient, log)
+					err = common.DoRequest(req, httpClient)
 					if err != nil {
 						return err
 					}

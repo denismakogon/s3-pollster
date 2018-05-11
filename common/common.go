@@ -8,8 +8,6 @@ import (
 	"net/http"
 	"os"
 	"time"
-
-	"github.com/sirupsen/logrus"
 )
 
 type PreSignedURLs struct {
@@ -48,7 +46,7 @@ func SetupHTTPClient() *http.Client {
 	return &http.Client{Transport: transport}
 }
 
-func DoRequest(req *http.Request, httpClient *http.Client, log *logrus.Entry) error {
+func DoRequest(req *http.Request, httpClient *http.Client) error {
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
@@ -60,11 +58,8 @@ func DoRequest(req *http.Request, httpClient *http.Client, log *logrus.Entry) er
 	}
 
 	if resp.StatusCode > http.StatusAccepted {
-		log.Infof("webhook was submitted successfully with the response: ", string(b))
-	} else {
-		errMsg := fmt.Errorf("webhook was submitted unsuccessfully with the response: %s", string(b))
-		log.Errorf(errMsg.Error())
-		return errMsg
+		return fmt.Errorf("unable to submit webhoot successfully, "+
+			"status code: %d, response body: '%s'", resp.StatusCode, string(b))
 	}
 
 	return nil
