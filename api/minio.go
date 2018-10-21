@@ -12,7 +12,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -98,16 +97,24 @@ func (m *MinioConfig) FromURL(s string) error {
 	return nil
 }
 
+func (m *MinioConfig) FromEnv() error {
+	return structs.StructFromEnv(m)
+}
+
 func (m *MinioConfig) ToMap() (map[string]interface{}, error) {
 	return structs.ToMap(m)
 }
 
-func NewFromEndpoint(endpoint string) (*Store, error) {
+func NewFromEnvVars() (*Store, error) {
 	m := &MinioConfig{}
-	err := m.FromURL(endpoint)
+	err := m.FromEnv()
 	if err != nil {
 		return nil, err
 	}
+	return m.setupStore()
+}
+
+func (m *MinioConfig) setupStore() (*Store, error) {
 	logFields, err := m.ToMap()
 	if err != nil {
 		return nil, err
@@ -130,8 +137,16 @@ func NewFromEndpoint(endpoint string) (*Store, error) {
 			return nil, fmt.Errorf("unexpected error creating bucket %s: %s", m.Bucket, err.Error())
 		}
 	}
-
 	return store, nil
+}
+
+func NewFromEndpoint(endpoint string) (*Store, error) {
+	m := &MinioConfig{}
+	err := m.FromURL(endpoint)
+	if err != nil {
+		return nil, err
+	}
+	return m.setupStore()
 }
 
 func NewFromEnv() (*Store, error) {
@@ -140,27 +155,29 @@ func NewFromEnv() (*Store, error) {
 	return NewFromEndpoint(mURL)
 }
 
-func (s *Store) asyncDispatcher(ctx context.Context, wg sync.WaitGroup, log *logrus.Entry, input *s3.ListObjectsInput,
+func (s *Store) asyncDispatcher(ctx context.Context, log *logrus.Entry, input *s3.ListObjectsV2Input,
 	req *http.Request, httpClient *http.Client) error {
 
-	result, err := s.Client.ListObjectsWithContext(ctx, input)
+	result, err := s.Client.ListObjectsV2WithContext(ctx, input)
 	if err != nil {
 		return err
 	}
+
+	log.Println("S3 returned: ", len(result.Contents), " objects")
 	fields := logrus.Fields{}
-	fields["current_key"] = *result.Marker
-	fields["objects_found"] = len(result.Contents)
-	if result.NextMarker != nil {
-		fields["next_query_key"] = *result.NextMarker
+	if input.StartAfter != nil {
+		log.Println("current marker: ", *input.StartAfter)
+		fields["current_key"] = *result.StartAfter
 	}
+	fields["objects_found"] = len(result.Contents)
+
 	log = log.WithFields(fields)
 	var b bytes.Buffer
 	if len(result.Contents) > 0 {
-		wg.Add(len(result.Contents))
+		mk := result.Contents[len(result.Contents)-1].Key
+		input.SetStartAfter(*mk)
 		for _, object := range result.Contents {
-
-			go func(wg sync.WaitGroup, object *s3.Object) {
-				defer wg.Done()
+			go func(object *s3.Object) {
 
 				err := func() error {
 					log.Info("Sending the object: ", s.Config.Bucket+"/"+*object.Key)
@@ -209,21 +226,19 @@ func (s *Store) asyncDispatcher(ctx context.Context, wg sync.WaitGroup, log *log
 					log.Error(err.Error())
 				}
 
-			}(wg, object)
+			}(object)
 		}
-		input.SetMarker(*result.NextMarker)
 	}
 
 	return nil
 }
 
-func (s *Store) DispatchObjects(ctx context.Context, wg sync.WaitGroup) error {
+func (s *Store) DispatchObjects(ctx context.Context) error {
 	log := logrus.WithFields(logrus.Fields{"bucketName": s.Config.Bucket})
 
-	input := &s3.ListObjectsInput{
+	input := &s3.ListObjectsV2Input{
 		Bucket:  aws.String(s.Config.Bucket),
 		MaxKeys: aws.Int64(10),
-		Marker:  aws.String(""),
 	}
 	webkookEndpoint := os.Getenv("WEBHOOK_ENDPOINT")
 	if webkookEndpoint == "" {
@@ -247,16 +262,13 @@ func (s *Store) DispatchObjects(ctx context.Context, wg sync.WaitGroup) error {
 	intBackoff, _ := strconv.Atoi(backoff)
 
 	for {
-
-		err = s.asyncDispatcher(ctx, wg, log, input, req, httpClient)
+		err = s.asyncDispatcher(ctx, log, input, req, httpClient)
 		if err != nil {
-			return err
+			log.Error(err.Error())
 		}
 
 		time.Sleep(time.Duration(intBackoff) * time.Second)
 	}
-
-	wg.Wait()
 
 	return nil
 }

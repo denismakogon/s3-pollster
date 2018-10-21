@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sync"
 
 	"github.com/denismakogon/s3-pollster/api"
 )
@@ -17,8 +16,7 @@ func start() error {
 		return err
 	}
 
-	var wg sync.WaitGroup
-	return s3.DispatchObjects(ctx, wg)
+	return s3.DispatchObjects(ctx)
 }
 
 func main() {

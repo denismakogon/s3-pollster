@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -61,6 +62,7 @@ func DoRequest(req *http.Request, httpClient *http.Client) error {
 		return fmt.Errorf("unable to submit webhoot successfully, "+
 			"status code: %d, response body: '%s'", resp.StatusCode, string(b))
 	}
+	log.Printf("request accepted, response: %s", string(b))
 
 	return nil
 }

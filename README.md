@@ -8,7 +8,7 @@
   "object": "<object>",
   "presigned_urls": {
     "get_url": "https://...",
-    "post_url": "https://..."
+    "put_url": "https://..."
   }
 }
 ```
